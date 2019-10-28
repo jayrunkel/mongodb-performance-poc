@@ -8,155 +8,107 @@ var config = require('config');
 var Stopwatch = require("statman-stopwatch");
 var moment = require('moment')
 
+var clientHandle = null;
+
 app.use(bodyParser.json());
 
-app.post('/test_run/:id', function(req, res, next)
-{
-  logRequest('POST', "/test_run", req.params );
-  test_id = req.params['id'];
-  MongoClient.connect(serverConfig.mongodb_url, { useNewUrlParser : true }, function(err, client)
-  {
-    if ( err != null )
-    {
-      res.send({ status : "error", 
-                 display_status : "Error", 
-                 message : 'MongoDB Connection Error: ' + err.message });
-      next();
-    }
-    else
-    {
-      const collection = getCollection(client);
-      doc = { _id : test_id, last_modified : new Date() };
-      collection.insertOne(doc, (function(err, result) 
-      {
-          if (err)
-          {
+app.post('/test_run/:id', function(req, res, next) {
+    logRequest('POST', "/test_run", req.params );
+    test_id = req.params['id'];
+  
+    const collection = getCollection(clientHandle);
+    doc = { _id : test_id, last_modified : new Date() };
+    collection.insertOne(doc, function(err, result) {
+        if (err) {
             res.json({message : 'Error: ' + err});
-          }
-          else
-          {
+        }
+	else {
             res.status(201).json({ test_id : test_id, message : 'Created test run: ' + test_id });
-          }
-          client.close();
-          next();
-      }));
-    }
-  });
-});
+        }
+        next();
+    });
+})
 
-app.get('/test_run/:id', function(req, res, next)
-{
-  logRequest('GET', "/test_run", req.params );
-  test_id = req.params['id'];
-  MongoClient.connect(serverConfig.mongodb_url, { useNewUrlParser : true }, function(err, client)
-  {
-    if ( err != null )
-    {
-      res.send({ status : "error", 
-                 display_status : "Error", 
-                 message : 'MongoDB Connection Error: ' + err.message });
-      next();
-    }
-    else
-    {
-      const collection = getCollection(client);
-      collection.findOne({ _id : test_id }, (function(err, result) 
-      {
-          if (err)
-          {
-            res.json( { message : 'Error: ' + err});
-          }
-          else
-          {
-            res.json(result);
-          }
-          client.close();
-          next();
-      }));
-    }
-  });
-});
-
-app.delete('/test_run/:id', function(req, res, next)
-{
-  logRequest('DELETE', "/test_run", req.params );
-  test_id = req.params['id'];
-  MongoClient.connect(serverConfig.mongodb_url, { useNewUrlParser : true }, function(err, client)
-  {
-    if ( err != null )
-    {
-      res.send({ status : "error", 
-                 display_status : "Error", 
-                 message : 'MongoDB Connection Error: ' + err.message });
-      next();
-    }
-    else
-    {
-      const collection = getCollection(client);
-      collection.deleteOne({ _id : test_id }, (function(err, result) 
-      {
-          if (err)
-          {
+app.post('/test_run/:id/log', function(req, res, next) {
+    logRequest('POST', "/test_run/id/log", req.params );
+    test_id = req.params['id'];
+  
+    const collection = getLogCollection(clientHandle);
+    doc = { test_id : test_id, inserted : new Date(), data : req.body };
+    collection.insertOne(doc, function(err, result) {
+        if (err) {
             res.json({message : 'Error: ' + err});
-          }
-          else
-          {
+        }
+	else {
+            res.status(201).json({ test_id : test_id, message : 'Logged event: ' + test_id });
+        }
+        next();
+    });
+})
+
+app.get('/test_run/:id', function(req, res, next) {
+    logRequest('GET', "/test_run", req.params );
+    test_id = req.params['id'];
+
+    const collection = getCollection(clientHandle);
+    collection.findOne({ _id : test_id }, function(err, result) {
+        if (err) {
+            res.json( { message : 'Error: ' + err});
+        }
+        else {
+            res.json(result);
+        }
+        next();
+    });
+})
+
+
+app.delete('/test_run/:id', function(req, res, next) {
+    logRequest('DELETE', "/test_run", req.params );
+    test_id = req.params['id'];
+
+    const collection = getCollection(clientHandle);
+    collection.deleteOne({ _id : test_id }, function(err, result) {
+        if (err) {
+            res.json({message : 'Error: ' + err});
+        }
+        else {
             res.json({message : 'Deleted test run: ' + test_id});
-          }
-          client.close();
-          next();
-      }));
-    }
-  });
-});
+        }
+        next();
+      });
+})
+
 
 // Called by template functions and to look up variables
-app.patch('/test_run/:id', function(req, res, next)
-{
-  logRequest('POST', "/test_run", req.params);
-  logRequest('POST', "/test_run", req.body);
-  test_id = req.params['id'];
+app.patch('/test_run/:id', function(req, res, next) {
+    logRequest('POST', "/test_run", req.params);
+    logRequest('POST', "/test_run", req.body);
+    test_id = req.params['id'];
 
-  MongoClient.connect(serverConfig.mongodb_url, { useNewUrlParser : true }, function(err, client)
-  {
-    if ( err != null )
-    {
-      res.send({ status : "error", 
-                 display_status : "Error", 
-                 message : 'MongoDB Connection Error: ' + err.message });
-      next();
-    }
-    else
-    {
-      // Parse payload
-      payload = req.body;
-      measurement_name = payload.measurement_name;
-      measurements = {}
-      measurements[measurement_name] = { '$each' : payload.measurements };
-
-      updateFilter = { _id : test_id };
-      updateAction = { '$push' : measurements, '$set' : { last_modified : new Date()} };
-      updateOptions = { upsert : true }
-      const collection = getCollection(client);
-      collection.updateOne(updateFilter, updateAction, updateOptions, (function(err, result) 
-      {
-          if (err)
-          {
+    // Parse payload
+    payload = req.body;
+    measurement_name = payload.measurement_name;
+    measurements = {}
+    measurements[measurement_name] = { '$each' : payload.measurements };
+    
+    updateFilter = { _id : test_id };
+    updateAction = { '$push' : measurements, '$set' : { last_modified : new Date()} };
+    updateOptions = { upsert : true }
+    const collection = getCollection(clientHandle);
+    collection.updateOne(updateFilter, updateAction, updateOptions, function(err, result) {
+        if (err) {
             res.json({message : 'Error: ' + err});
-          }
-          else
-          {
+        }
+        else
+        {
             res.json({message : 'ok'});
-          }
-          client.close();
-          next();
-      }));
-    }
-  });
-});
+        }
+        next();
+      });
+})
 
-app.use(function(error, req, res, next) 
-{
+app.use(function(error, req, res, next) {
   // Any request to this server will get here, and will send an HTTP
   // response with the error message
   console.log(error)
@@ -166,13 +118,27 @@ app.use(function(error, req, res, next)
 // Get config from server/default.json
 var serverConfig = config.get('server');
 
-app.listen(serverConfig.port);
+MongoClient.connect(serverConfig.mongodb_url, { useNewUrlParser : true }, function(err, client) {
+    if ( err != null ) {
+	res.send({ status : "error", 
+                   display_status : "Error", 
+                   message : 'MongoDB Connection Error: ' + err.message });
+    }
+    else {
+	clientHandle = client;
+	app.listen(serverConfig.port);
+    }
+})
 
 console.log("Server is listening on port " + serverConfig.port);
 
 function getCollection(client)
 {
   return client.db('poc_data').collection('test_run');
+}
+
+function getLogCollection(client) {
+    return client.db('poc_data').collection('event_data');
 }
 
 function logRequest(verb, type, data)
