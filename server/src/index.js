@@ -6,7 +6,19 @@ const MongoClient = require('mongodb').MongoClient;
 const assert = require('assert');
 var config = require('config');
 var Stopwatch = require("statman-stopwatch");
-var moment = require('moment')
+var moment = require('moment');
+
+// Get config from server/default.json
+var serverConfig = config.get('server');
+console.log("Port arg: ", process.argv.slice(2)[0]);
+console.log("Config Port arg: ", serverConfig.port);
+var port = 3334;
+
+if (process.argv.slice(2)[0]) {
+    port = process.argv.slice(2)[0];
+} else if (serverConfig.port) {
+    port = serverConfig.port;
+}
 
 var clientHandle = null;
 
@@ -115,8 +127,7 @@ app.use(function(error, req, res, next) {
   res.status(500).json({ message: error.message });
 });
 
-// Get config from server/default.json
-var serverConfig = config.get('server');
+
 
 MongoClient.connect(serverConfig.mongodb_url, { useNewUrlParser : true }, function(err, client) {
     if ( err != null ) {
@@ -126,11 +137,11 @@ MongoClient.connect(serverConfig.mongodb_url, { useNewUrlParser : true }, functi
     }
     else {
 	clientHandle = client;
-	app.listen(serverConfig.port);
+	app.listen(port);
     }
 })
 
-console.log("Server is listening on port " + serverConfig.port);
+console.log("Server is listening on port " + port);
 
 function getCollection(client)
 {
